@@ -8,18 +8,19 @@ beep谱指以`[频率, 持续时间]`表示一个音符的乐谱，用于蜂鸣�
 ## 用法
 
 ```
-usage: mml2beep.py [-h] [-t TRACK] mml_file beep_file
+usage: mml2beep.py [-h] [-t TRACK] [-s] [mml_file] [beep_file]
 
 转换MML乐谱到beep谱
 
 positional arguments:
-  mml_file              输入的MML文件，格式为txt
-  beep_file             输出的beep文件路径，格式为JSON。其中第一个数为频率(Hz)，如果为0则表示延时。第二个数为持续时间(ms)。若省略则输出到标准输出流。
+  mml_file              输入的 MML 文件，格式为 txt . 若省略则使用标准输入流读取数据.
+  beep_file             输出的 beep 文件路径, 格式为 JSON . 其中第一个数为频率 (Hz) , 如果为 0
+                        则表示延时. 第二个数为持续时间 (ms) . 若省略则输出到标准输出流.
 
 optional arguments:
   -h, --help            show this help message and exit
   -t TRACK, --track TRACK
-                        输出第几个音轨，默认为1
+                        输出第几个音轨，默认为 1
   -s, --split           将所有频率与持续时间拆分为两个数组输出
 ```
 

@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import argparse
-import json
-
+import argparse, json
 
 class MmlParser:
     """MML语法参考：https://mabinogi.fws.tw/ac_com_annzyral.php"""
@@ -214,24 +212,28 @@ class MmlParser:
         duration = int(60 / self._tempo * 4 / self._default_length * 1000)
         return [frequency, duration]
 
-
 def main():
     parser = argparse.ArgumentParser(description='转换MML乐谱到beep谱')
-    parser.add_argument('mml_file', help='输入的MML文件，格式为txt')
-    parser.add_argument('beep_file', default=None, nargs='?', help='输出的beep文件路径，格式为JSON。其中第一个数为频率(Hz)，如果为0则表示延时。'
-                                          '第二个数为持续时间(ms)。若省略则输出到标准输出流。')
-    parser.add_argument('-t', '--track', type=int, default=1, help='输出第几个音轨，默认为1')
+    parser.add_argument('mml_file', default=None, nargs='?', help='输入的 MML 文件，格式为 txt . 若省略则使用标准输入流读取数据.')
+    parser.add_argument('beep_file', default=None, nargs='?', help='输出的 beep 文件路径, 格式为 JSON . 其中第一个数为频率 (Hz) , 如果为 0 则表示延时. 第二个数为持续时间 (ms) . 若省略则输出到标准输出流.')
+    parser.add_argument('-t', '--track', type=int, default=1, help='输出第几个音轨，默认为 1 ')
     parser.add_argument('-s', '--split', action="store_true", help='将所有频率与持续时间拆分为两个数组输出')
+
     args = parser.parse_args()
     args.track -= 1
 
-    with open(args.mml_file) as f:
-        mml = f.read()
+    if not args.mml_file:
+        mml = input("请粘贴 MML 格式数据, 使用换行符结束 >>> ")
+        print()
+    else:
+        with open(args.mml_file) as f:
+            mml = f.read()
+            
     res = MmlParser().parse(mml)
-
+    
     track_data = res[args.track]
     ret = json.dumps(args.split and [list(t) for t in zip(*track_data)] or track_data)
-            
+    
     if args.beep_file:
         with open(args.beep_file, 'w') as f:
             f.write(ret)
