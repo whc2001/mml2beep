@@ -218,17 +218,25 @@ class MmlParser:
 def main():
     parser = argparse.ArgumentParser(description='转换MML乐谱到beep谱')
     parser.add_argument('mml_file', help='输入的MML文件，格式为txt')
-    parser.add_argument('beep_file', help='输出的beep文件路径，格式为JSON。其中第一个数为频率(Hz)，如果为0则表示延时。'
-                                          '第二个数为持续时间(ms)')
+    parser.add_argument('beep_file', default=None, nargs='?', help='输出的beep文件路径，格式为JSON。其中第一个数为频率(Hz)，如果为0则表示延时。'
+                                          '第二个数为持续时间(ms)。若省略则输出到标准输出流。')
     parser.add_argument('-t', '--track', type=int, default=1, help='输出第几个音轨，默认为1')
+    parser.add_argument('-s', '--split', action="store_true", help='将所有频率与持续时间拆分为两个数组输出')
     args = parser.parse_args()
     args.track -= 1
 
     with open(args.mml_file) as f:
         mml = f.read()
     res = MmlParser().parse(mml)
-    with open(args.beep_file, 'w') as f:
-        json.dump(res[args.track], f)
+
+    track_data = res[args.track]
+    ret = json.dumps(args.split and [list(t) for t in zip(*track_data)] or track_data)
+            
+    if args.beep_file:
+        with open(args.beep_file, 'w') as f:
+            f.write(ret)
+    else:
+        print(ret)
 
 
 if __name__ == '__main__':
