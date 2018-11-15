@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
 
-import argparse, json
+import argparse, json, os
+from time import sleep
+
+is_windows = "nt" in os.name
+
+if is_windows:
+    try:
+        import InpOut32
+    except:
+        pass
+else:
+    import fcntl, termios, os
+    beep_device = os.open("/dev/console", os.O_WRONLY)
 
 class MmlParser:
     """MML语法参考：https://mabinogi.fws.tw/ac_com_annzyral.php"""
@@ -35,10 +47,17 @@ class MmlParser:
 
         # 音程
         self._octave = 4
+        # 音程强制偏移量
+        self._octave_shift = 0
         # 预设音长（几分音符，4分音符为1拍）
         self._default_length = 4
         # 速度（BPM，一分钟几拍）
         self._tempo = 120
+
+    """ 设置相对音程 """
+    def shift_octave(self, value):
+        self._octave_shift = value
+        return self
 
     def parse(self, mml):
         """转换MML乐谱到beep谱
@@ -183,7 +202,7 @@ class MmlParser:
         # 音长（几分音符）
         length = self._read_length() or self._default_length
 
-        frequency = int(self.FREQ_TABLE[octave][scale])
+        frequency = int(self.FREQ_TABLE[octave + self._octave_shift][scale])
         duration = int(60 / self._tempo * 4 / length * 1000)
         return [frequency, duration]
 
@@ -212,15 +231,40 @@ class MmlParser:
         duration = int(60 / self._tempo * 4 / self._default_length * 1000)
         return [frequency, duration]
 
+def beep(freq, dura):
+    """ For further info please see https://wiki.osdev.org/PC_Speaker  """
+    """ Linux https://eadmaster.altervista.org/pub/prj/cliapps/beep.py """
+    if freq > 0:
+        cycle = int(1193180 / freq)
+        if is_windows:
+            InpOut32.DlPortWritePortUchar(67, 182)
+            InpOut32.DlPortWritePortUchar(66, (cycle & 255))
+            InpOut32.DlPortWritePortUchar(66, ((cycle >> 8) & 255))
+            tmp = InpOut32.DlPortReadPortUchar(97)
+            InpOut32.DlPortWritePortUchar(97, (tmp | 3))
+        else:
+            global beep_device
+            fcntl.ioctl(beep_device, 19247, cycle)
+    sleep(dura / 1000)
+    if is_windows:
+        tmp = InpOut32.DlPortReadPortUchar(97)
+        InpOut32.DlPortWritePortUchar(97, (tmp & 252))
+    else:
+        fcntl.ioctl(beep_device, 19247, 0)
+
 def main():
     parser = argparse.ArgumentParser(description='转换MML乐谱到beep谱')
     parser.add_argument('mml_file', default=None, nargs='?', help='输入的 MML 文件，格式为 txt . 若省略则使用标准输入流读取数据.')
     parser.add_argument('beep_file', default=None, nargs='?', help='输出的 beep 文件路径, 格式为 JSON . 其中第一个数为频率 (Hz) , 如果为 0 则表示延时. 第二个数为持续时间 (ms) . 若省略则输出到标准输出流.')
     parser.add_argument('-t', '--track', type=int, default=1, help='输出第几个音轨，默认为 1 ')
     parser.add_argument('-s', '--split', action="store_true", help='将所有频率与持续时间拆分为两个数组输出')
+    parser.add_argument('-o', '--octave', type=int, default=0, help='将输出数据整体移动八度, 可取值 -2 ~ 2, 正为上移 (更高音) 负为下移 (更低音)')
+    parser.add_argument('-p', '--play', action="store_true", help='直接通过 PC 喇叭实时播放乐谱, beep_file 与 --split 参数将无效. Windows 下需要 InpOut32 库支持且首次需要以管理员权限运行以安装驱动; Linux 下必须使用 root 权限运行.')
 
     args = parser.parse_args()
     args.track -= 1
+    if abs(args.octave) > 2:
+        raise ValueError("八度移动超出范围, 允许的值在 -2 ~ 2 之间")
 
     if not args.mml_file:
         mml = input("请粘贴 MML 格式数据, 使用换行符结束 >>> ")
@@ -229,17 +273,32 @@ def main():
         with open(args.mml_file) as f:
             mml = f.read()
             
-    res = MmlParser().parse(mml)
-    
+    res = MmlParser().shift_octave(args.octave).parse(mml)
     track_data = res[args.track]
-    ret = json.dumps(args.split and [list(t) for t in zip(*track_data)] or track_data)
-    
-    if args.beep_file:
-        with open(args.beep_file, 'w') as f:
-            f.write(ret)
-    else:
-        print(ret)
 
+    if args.play:
+        if is_windows:
+            try:
+                if not InpOut32.IsInpOutDriverOpen():
+                    raise IOError("无法打开 InpOut32 驱动, 请使用管理员权限运行一次以安装驱动!")
+            except:
+                raise IOError("无法找到 InpOut32 动态链接库, 请确保 'inpout32.dll' 与 'inpoutx64.dll' 与脚本处在同一目录下!")
+        for item in track_data:
+            print(item)
+            try:
+                beep(item[0], item[1])
+            except KeyboardInterrupt:
+                beep(0, 0)
+                if not is_windows:
+                    os.close(beep_device)
+                break
+    else:
+        ret = json.dumps(args.split and [list(t) for t in zip(*track_data)] or track_data)
+        if args.beep_file:
+            with open(args.beep_file, 'w') as f:
+                f.write(ret)
+        else:
+            print(ret)
 
 if __name__ == '__main__':
     main()
